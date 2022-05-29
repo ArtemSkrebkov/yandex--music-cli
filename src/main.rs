@@ -1,6 +1,7 @@
 mod actions;
 mod app;
 mod inputs;
+mod io;
 mod ui;
 
 use app::App;
@@ -9,15 +10,18 @@ use app::AppReturn;
 use inputs::events::Events;
 use inputs::InputEvent;
 
-use std::cell::RefCell;
+use io::handler::IoAsyncHandler;
+use io::IoEvent;
+
+use eyre::Result;
+
 use std::error::Error;
-use std::io;
-use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Duration;
 use tui::{backend::CrosstermBackend, Terminal};
 
-pub fn start_ui(app: Rc<RefCell<App>>) -> Result<(), Box<dyn Error>> {
-    let stdout = io::stdout();
+pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App>>) -> Result<(), Box<dyn Error>> {
+    let stdout = std::io::stdout();
 
     crossterm::terminal::enable_raw_mode();
     let backend = CrosstermBackend::new(stdout);
@@ -25,19 +29,24 @@ pub fn start_ui(app: Rc<RefCell<App>>) -> Result<(), Box<dyn Error>> {
     terminal.clear()?;
     terminal.hide_cursor()?;
 
-    let tick_rate = Duration::from_millis(200);
-    let events = Events::new(tick_rate);
+    {
+        let mut app = app.lock().await;
+        app.dispatch(IoEvent::Initialize).await;
+    }
 
+    let tick_rate = Duration::from_millis(200);
+    let mut events = Events::new(tick_rate);
     loop {
-        let mut app = app.borrow_mut();
+        let mut app = app.lock().await;
         terminal.draw(|rect| ui::draw(rect, &app))?;
 
-        let result = match events.next()? {
-            InputEvent::Input(key) => app.do_action(key),
-            InputEvent::Tick => app.update_on_tick(),
+        let result = match events.next().await {
+            InputEvent::Input(key) => app.do_action(key).await,
+            InputEvent::Tick => app.update_on_tick().await,
         };
 
         if result == AppReturn::Exit {
+            events.close();
             break;
         }
     }
@@ -49,8 +58,20 @@ pub fn start_ui(app: Rc<RefCell<App>>) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let app = Rc::new(RefCell::new(App::new()));
-    start_ui(app)?;
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    let (sync_io_tx, mut sync_io_rx) = tokio::sync::mpsc::channel::<IoEvent>(100);
+
+    let app = Arc::new(tokio::sync::Mutex::new(App::new(sync_io_tx.clone())));
+    let app_ui = Arc::clone(&app);
+
+    tokio::spawn(async move {
+        let mut handler = IoAsyncHandler::new(app);
+        while let Some(io_event) = sync_io_rx.recv().await {
+            handler.handle_io_event(io_event).await;
+        }
+    });
+
+    start_ui(&app_ui).await?;
     Ok(())
 }
