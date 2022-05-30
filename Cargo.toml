@@ -11,3 +11,4 @@ crossterm = "0.23"
 tokio = { version = "1.18.2", features = ["full"] }
 log = "0.4.17"
 eyre = "0.6.8"
+tui-logger = { git = "https://github.com/gin66/tui-logger", rev = "cd7e42665a8eac60adac6ab5d570730dfbcb3a12" }

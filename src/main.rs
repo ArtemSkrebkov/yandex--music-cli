@@ -15,6 +15,8 @@ use io::IoEvent;
 
 use eyre::Result;
 
+use log::LevelFilter;
+
 use std::error::Error;
 use std::sync::Arc;
 use std::time::Duration;
@@ -60,6 +62,9 @@ pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App>>) -> Result<(), Box<dyn 
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    tui_logger::init_logger(LevelFilter::Debug).unwrap();
+    tui_logger::set_default_level(log::LevelFilter::Debug);
+
     let (sync_io_tx, mut sync_io_rx) = tokio::sync::mpsc::channel::<IoEvent>(100);
 
     let app = Arc::new(tokio::sync::Mutex::new(App::new(sync_io_tx.clone())));
