@@ -9,12 +9,19 @@ use crate::inputs::key::Key;
 pub enum Action {
     Quit,
     Sleep,
+    IncreaseDelay,
+    DecreaseDelay,
 }
 
 impl Action {
     /// All available actions
     pub fn iterator() -> Iter<'static, Action> {
-        static ACTIONS: [Action; 2] = [Action::Quit, Action::Sleep];
+        static ACTIONS: [Action; 4] = [
+            Action::Quit,
+            Action::Sleep,
+            Action::IncreaseDelay,
+            Action::DecreaseDelay,
+        ];
         ACTIONS.iter()
     }
 
@@ -23,6 +30,8 @@ impl Action {
         match self {
             Action::Quit => &[Key::Ctrl('c'), Key::Char('q')],
             Action::Sleep => &[Key::Char('s')],
+            Action::IncreaseDelay => &[Key::Char('+')],
+            Action::DecreaseDelay => &[Key::Char('-')],
         }
     }
 }
@@ -33,6 +42,8 @@ impl Display for Action {
         let str = match self {
             Action::Quit => "Quit",
             Action::Sleep => "Sleep",
+            Action::IncreaseDelay => "IncreaseDelay",
+            Action::DecreaseDelay => "DecreaseDelay",
         };
         write!(f, "{}", str)
     }

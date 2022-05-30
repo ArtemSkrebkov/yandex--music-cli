@@ -118,7 +118,13 @@ impl App {
     }
 
     pub fn initialized(&mut self) {
-        self.actions = vec![Action::Quit, Action::Sleep].into();
+        self.actions = vec![
+            Action::Quit,
+            Action::Sleep,
+            Action::IncreaseDelay,
+            Action::DecreaseDelay,
+        ]
+        .into();
         self.state = AppState::initialized();
     }
 
@@ -144,6 +150,14 @@ impl App {
                     if let Some(duration) = self.state.duration().cloned() {
                         self.dispatch(IoEvent::Sleep(duration)).await
                     }
+                    AppReturn::Continue
+                }
+                Action::IncreaseDelay => {
+                    self.state.increment_delay();
+                    AppReturn::Continue
+                }
+                Action::DecreaseDelay => {
+                    self.state.decrement_delay();
                     AppReturn::Continue
                 }
             }
