@@ -1,7 +1,6 @@
 use pyo3::prelude::*;
 use rand::{thread_rng, Rng};
 
-use rodio::source::SineWave;
 use rodio::source::Source;
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink};
 use std::fs::File;
@@ -82,10 +81,22 @@ impl Track {
     }
 }
 
+#[derive(Clone)]
+pub struct Sound {
+    total_duration: Duration,
+}
+
+impl Sound {
+    pub fn total_duration(&self) -> Duration {
+        self.total_duration
+    }
+}
+
 pub struct Player {
     sink: rodio::Sink,
     stream: OutputStream,
     stream_handle: OutputStreamHandle,
+    current_sound: Option<Sound>,
 }
 
 unsafe impl Send for Player {}
@@ -98,14 +109,23 @@ impl Player {
             sink,
             stream,
             stream_handle,
+            current_sound: None,
         }
     }
 
-    pub fn append(&self, filename: &str) {
+    pub fn append(&mut self, filename: &str) {
         // Load a sound from a file, using a path relative to Cargo.toml
         let file = BufReader::new(File::open(filename).unwrap());
         // Decode that sound file into a source
+        // FIXME:
+        // let s10 = Duration::from_secs(10);
         let source = Decoder::new(file).unwrap();
+        // self.current_sound = Some(Sound {
+        //     total_duration: source
+        //         .total_duration()
+        //         .expect("Cannot get duration of source"),
+        // });
+        // println!("Duration {}", source.total_duration().unwrap().as_secs());
         self.sink.append(source);
         if !self.sink.is_paused() {
             self.sink.pause();
@@ -118,6 +138,10 @@ impl Player {
 
     pub fn pause(&self) {
         self.sink.pause();
+    }
+
+    pub fn current_sound(&self) -> Option<&Sound> {
+        self.current_sound.as_ref()
     }
 }
 
@@ -135,10 +159,19 @@ mod tests {
 
         let local_track_path = track.download();
 
-        let player = Player::new();
-        player.play(&local_track_path);
+        let mut player = Player::new();
+        player.append(&local_track_path);
+        player.play();
         println!("Started playing...");
         std::thread::sleep(std::time::Duration::from_secs(10));
         player.pause();
+    }
+
+    #[test]
+    fn player_can_get_total_duration() {
+        let mut player = Player::new();
+        player.append("Зол.mp3");
+        let duration = player.current_sound().unwrap().total_duration();
+        assert!(duration.as_secs() > 0);
     }
 }
