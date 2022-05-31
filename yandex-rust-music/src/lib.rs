@@ -9,7 +9,8 @@ use std::io::BufReader;
 use std::path::Path;
 use std::time::Duration;
 
-struct Client {
+#[derive(Clone)]
+pub struct Client {
     tracks: Vec<Track>,
 }
 
@@ -57,7 +58,8 @@ impl Client {
     }
 }
 
-struct Track {
+#[derive(Clone)]
+pub struct Track {
     title: String,
     track_py: PyObject,
 }
@@ -80,11 +82,13 @@ impl Track {
     }
 }
 
-struct Player {
+pub struct Player {
     sink: rodio::Sink,
     stream: OutputStream,
     stream_handle: OutputStreamHandle,
 }
+
+unsafe impl Send for Player {}
 
 impl Player {
     pub fn new() -> Self {
@@ -97,12 +101,19 @@ impl Player {
         }
     }
 
-    pub fn play(&self, filename: &str) {
+    pub fn append(&self, filename: &str) {
         // Load a sound from a file, using a path relative to Cargo.toml
         let file = BufReader::new(File::open(filename).unwrap());
         // Decode that sound file into a source
         let source = Decoder::new(file).unwrap();
         self.sink.append(source);
+        if !self.sink.is_paused() {
+            self.sink.pause();
+        }
+    }
+
+    pub fn play(&self) {
+        self.sink.play();
     }
 
     pub fn pause(&self) {
