@@ -5,6 +5,7 @@ use crate::io::IoEvent;
 use std::time::Duration;
 
 use log::{debug, error, warn};
+use yandex_rust_music::{Client, Player, Track};
 
 #[derive(Clone)]
 pub enum AppState {
@@ -102,6 +103,9 @@ pub struct App {
     actions: Actions,
     is_loading: bool,
     state: AppState,
+    client: Client,
+    track_path: String,
+    player: Player,
 }
 
 impl App {
@@ -109,11 +113,18 @@ impl App {
         let actions = vec![Action::Quit].into();
         let is_loading = false;
         let state = AppState::default();
+        let client = Client::new("AQAAAAA59C-DAAG8Xn4u-YGNfkkqnBG_DcwEnjM");
+        let track_path = client.get_random_track().download();
+        // TODO: Player::default
+        let player = Player::new();
         Self {
             io_tx,
             actions,
             is_loading,
             state,
+            client,
+            track_path,
+            player,
         }
     }
 
@@ -123,8 +134,12 @@ impl App {
             Action::Sleep,
             Action::IncreaseDelay,
             Action::DecreaseDelay,
+            Action::PlaySound,
+            Action::PauseSound,
         ]
         .into();
+        self.player.append(&self.track_path);
+        debug!("Added song {}...", self.track_path);
         self.state = AppState::initialized();
     }
 
@@ -158,6 +173,14 @@ impl App {
                 }
                 Action::DecreaseDelay => {
                     self.state.decrement_delay();
+                    AppReturn::Continue
+                }
+                Action::PlaySound => {
+                    self.player.play();
+                    AppReturn::Continue
+                }
+                Action::PauseSound => {
+                    self.player.pause();
                     AppReturn::Continue
                 }
             }
