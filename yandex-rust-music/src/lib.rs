@@ -1,12 +1,11 @@
 use pyo3::prelude::*;
 use rand::{thread_rng, Rng};
 
-use rodio::source::Source;
 use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[derive(Clone)]
 pub struct Client {
@@ -20,7 +19,7 @@ impl Client {
         let yandex_music_py = PyModule::import(py, "yandex_music").unwrap();
         let client_class_py = yandex_music_py.getattr("Client").unwrap();
         let client_py = client_class_py.call1(((token),)).unwrap();
-        client_py.call_method0("init");
+        client_py.call_method0("init").unwrap();
 
         let feed_py = client_py.call_method0("feed").unwrap();
         let generated_playlists_py = feed_py.getattr("generated_playlists").unwrap();
@@ -29,9 +28,8 @@ impl Client {
         let playlist_type_py = playlist_of_the_day_py.getattr("type").unwrap();
         println!("Playlist type {}", playlist_type_py);
         let playlist_py = playlist_of_the_day_py.getattr("data").unwrap();
-        let track_count_py = playlist_py.getattr("track_count").unwrap();
-        let track_count = track_count_py.extract::<usize>().unwrap();
-        println!("Track count {}", track_count_py);
+        // let track_count_py = playlist_py.getattr("track_count").unwrap();
+        // let track_count = track_count_py.extract::<usize>().unwrap();
         let track_count = 2;
 
         let mut tracks = Vec::new();
@@ -39,10 +37,15 @@ impl Client {
             let tracks_short_py = playlist_py.getattr("tracks").unwrap();
             let track_short_py = tracks_short_py.get_item(i).unwrap();
             let track_py = track_short_py.call_method0("fetch_track").unwrap();
+
             let title_py = track_py.getattr("title").unwrap();
             let title = title_py.extract::<&str>().unwrap();
+
+            let total_duration_py = track_py.getattr("duration_ms").unwrap();
+            let total_duration_ms = total_duration_py.extract::<u64>().unwrap();
             tracks.push(Track {
                 title: String::from(title),
+                total_duration: Duration::from_millis(total_duration_ms),
                 track_py: track_py.into(),
             });
         }
@@ -60,6 +63,7 @@ impl Client {
 #[derive(Clone)]
 pub struct Track {
     title: String,
+    total_duration: Duration,
     track_py: PyObject,
 }
 
@@ -79,24 +83,45 @@ impl Track {
 
         filename
     }
+
+    pub fn total_duration(&self) -> Option<Duration> {
+        let total_duration = self.total_duration;
+        Some(total_duration)
+    }
+}
+#[derive(Copy, Clone)]
+pub enum Status {
+    Playing(Instant, Duration),
+    Paused(Duration),
 }
 
-#[derive(Clone)]
-pub struct Sound {
-    total_duration: Duration,
-}
+impl Status {
+    pub fn elapsed(self) -> Duration {
+        match self {
+            Status::Paused(d) => d,
+            Status::Playing(start, extra) => start.elapsed() + extra,
+        }
+    }
 
-impl Sound {
-    pub fn total_duration(&self) -> Duration {
-        self.total_duration
+    pub fn pause(&mut self) {
+        *self = match *self {
+            Status::Paused(_) => *self,
+            Status::Playing(start, extra) => Status::Paused(start.elapsed() + extra),
+        };
+    }
+
+    pub fn play(&mut self) {
+        *self = match *self {
+            Status::Playing(_, _) => *self,
+            Status::Paused(duration) => Status::Playing(Instant::now(), duration),
+        };
     }
 }
 
 pub struct Player {
     sink: rodio::Sink,
-    stream: OutputStream,
-    stream_handle: OutputStreamHandle,
-    current_sound: Option<Sound>,
+    _stream: OutputStream,
+    _stream_handle: OutputStreamHandle,
 }
 
 unsafe impl Send for Player {}
@@ -107,9 +132,8 @@ impl Player {
         let sink = Sink::try_new(&stream_handle).unwrap();
         Self {
             sink,
-            stream,
-            stream_handle,
-            current_sound: None,
+            _stream: stream,
+            _stream_handle: stream_handle,
         }
     }
 
@@ -117,15 +141,14 @@ impl Player {
         // Load a sound from a file, using a path relative to Cargo.toml
         let file = BufReader::new(File::open(filename).unwrap());
         // Decode that sound file into a source
-        // FIXME:
-        // let s10 = Duration::from_secs(10);
         let source = Decoder::new(file).unwrap();
+        // FIXME: for some reason
+        // we cannot get duration from Source here
         // self.current_sound = Some(Sound {
         //     total_duration: source
         //         .total_duration()
         //         .expect("Cannot get duration of source"),
         // });
-        // println!("Duration {}", source.total_duration().unwrap().as_secs());
         self.sink.append(source);
         if !self.sink.is_paused() {
             self.sink.pause();
@@ -138,10 +161,6 @@ impl Player {
 
     pub fn pause(&self) {
         self.sink.pause();
-    }
-
-    pub fn current_sound(&self) -> Option<&Sound> {
-        self.current_sound.as_ref()
     }
 }
 
@@ -163,15 +182,31 @@ mod tests {
         player.append(&local_track_path);
         player.play();
         println!("Started playing...");
-        std::thread::sleep(std::time::Duration::from_secs(10));
+        std::thread::sleep(std::time::Duration::from_secs(1));
         player.pause();
     }
 
     #[test]
-    fn player_can_get_total_duration() {
-        let mut player = Player::new();
-        player.append("Зол.mp3");
-        let duration = player.current_sound().unwrap().total_duration();
-        assert!(duration.as_secs() > 0);
+    fn track_can_get_total_duration() {
+        let client = Client::new("AQAAAAA59C-DAAG8Xn4u-YGNfkkqnBG_DcwEnjM");
+        let track = client.get_random_track();
+        let total_duration: Duration = track.total_duration().unwrap();
+        assert!(total_duration.as_secs() > 60);
+    }
+
+    #[test]
+    fn status_can_pause_and_play() {
+        let mut status = Status::Playing(Instant::now(), Duration::from_secs(0));
+        status.pause();
+
+        let duration = match status {
+            Status::Paused(d) => d,
+            _ => panic!("Unexpected value"),
+        };
+
+        ::std::thread::sleep(Duration::from_secs(5));
+        status.play();
+
+        assert_eq!(status.elapsed().as_secs(), duration.as_secs());
     }
 }
