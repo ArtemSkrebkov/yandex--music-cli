@@ -5,27 +5,23 @@ use crate::io::IoEvent;
 use std::time::Duration;
 
 use log::{debug, error, warn};
-use yandex_rust_music::{Client, Player, Track};
+use yandex_rust_music::{Client, Player, Status};
 
 #[derive(Clone)]
 pub enum AppState {
     Init,
     Initialized {
         duration: Duration,
-        counter_sleep: u32,
-        counter_tick: u64,
+        total_duration: Duration,
     },
 }
 
 impl AppState {
-    pub fn initialized() -> Self {
-        let duration = Duration::from_secs(1);
-        let counter_sleep = 0;
-        let counter_tick = 0;
+    pub fn initialized(total_duration: &Duration) -> Self {
+        let duration = Duration::from_secs(0);
         Self::Initialized {
             duration,
-            counter_sleep,
-            counter_tick,
+            total_duration: total_duration.clone(),
         }
     }
 
@@ -33,31 +29,9 @@ impl AppState {
         matches!(self, &Self::Initialized { .. })
     }
 
-    pub fn incr_sleep(&mut self) {
-        if let Self::Initialized { counter_sleep, .. } = self {
-            *counter_sleep += 1;
-        }
-    }
-
-    pub fn incr_tick(&mut self) {
-        if let Self::Initialized { counter_tick, .. } = self {
-            *counter_tick += 1;
-        }
-    }
-
-    pub fn count_sleep(&self) -> Option<u32> {
-        if let Self::Initialized { counter_sleep, .. } = self {
-            Some(*counter_sleep)
-        } else {
-            None
-        }
-    }
-
-    pub fn count_tick(&self) -> Option<u64> {
-        if let Self::Initialized { counter_tick, .. } = self {
-            Some(*counter_tick)
-        } else {
-            None
+    pub fn update_duration(&mut self, current_duration: Duration) {
+        if let Self::Initialized { duration, .. } = self {
+            *duration = current_duration;
         }
     }
 
@@ -69,19 +43,11 @@ impl AppState {
         }
     }
 
-    pub fn increment_delay(&mut self) {
-        if let Self::Initialized { duration, .. } = self {
-            // Set the duration, note that the duration is in 1s..10s
-            let secs = (duration.as_secs() + 1).clamp(1, 10);
-            *duration = Duration::from_secs(secs);
-        }
-    }
-
-    pub fn decrement_delay(&mut self) {
-        if let Self::Initialized { duration, .. } = self {
-            // Set the duration, note that the duration is in 1s..10s
-            let secs = (duration.as_secs() - 1).clamp(1, 10);
-            *duration = Duration::from_secs(secs);
+    pub fn total_duration(&self) -> Option<&Duration> {
+        if let Self::Initialized { total_duration, .. } = self {
+            Some(total_duration)
+        } else {
+            None
         }
     }
 }
@@ -104,8 +70,8 @@ pub struct App {
     is_loading: bool,
     state: AppState,
     client: Client,
-    track_path: String,
     player: Player,
+    status: Status,
 }
 
 impl App {
@@ -114,7 +80,6 @@ impl App {
         let is_loading = false;
         let state = AppState::default();
         let client = Client::new("AQAAAAA59C-DAAG8Xn4u-YGNfkkqnBG_DcwEnjM");
-        let track_path = client.get_random_track().download();
         // TODO: Player::default
         let player = Player::new();
         Self {
@@ -123,28 +88,23 @@ impl App {
             is_loading,
             state,
             client,
-            track_path,
             player,
+            status: Status::Paused(Duration::from_secs(0)),
         }
     }
 
     pub fn initialized(&mut self) {
-        self.actions = vec![
-            Action::Quit,
-            Action::Sleep,
-            Action::IncreaseDelay,
-            Action::DecreaseDelay,
-            Action::PlaySound,
-            Action::PauseSound,
-        ]
-        .into();
-        self.player.append(&self.track_path);
-        debug!("Added song {}...", self.track_path);
-        self.state = AppState::initialized();
+        self.actions = vec![Action::Quit, Action::PlaySound, Action::PauseSound].into();
+        let track = self.client.get_random_track();
+        let track_path = track.download();
+        self.player.append(&track_path);
+        let total_duration = track.total_duration().unwrap();
+        debug!("Added song {}...", track_path);
+        self.state = AppState::initialized(&total_duration);
     }
 
     pub async fn update_on_tick(&mut self) -> AppReturn {
-        self.state.incr_tick();
+        self.state.update_duration(self.status.elapsed());
         AppReturn::Continue
     }
 
@@ -161,26 +121,14 @@ impl App {
             debug!("Run action [{:?}]", action);
             match action {
                 Action::Quit => AppReturn::Exit,
-                Action::Sleep => {
-                    if let Some(duration) = self.state.duration().cloned() {
-                        self.dispatch(IoEvent::Sleep(duration)).await
-                    }
-                    AppReturn::Continue
-                }
-                Action::IncreaseDelay => {
-                    self.state.increment_delay();
-                    AppReturn::Continue
-                }
-                Action::DecreaseDelay => {
-                    self.state.decrement_delay();
-                    AppReturn::Continue
-                }
                 Action::PlaySound => {
                     self.player.play();
+                    self.status.play();
                     AppReturn::Continue
                 }
                 Action::PauseSound => {
                     self.player.pause();
+                    self.status.pause();
                     AppReturn::Continue
                 }
             }
@@ -204,9 +152,5 @@ impl App {
 
     pub fn loaded(&mut self) {
         self.is_loading = false;
-    }
-
-    pub fn slept(&mut self) {
-        self.state.incr_sleep();
     }
 }

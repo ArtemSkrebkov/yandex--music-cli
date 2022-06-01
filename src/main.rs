@@ -25,7 +25,7 @@ use tui::{backend::CrosstermBackend, Terminal};
 pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App>>) -> Result<(), Box<dyn Error>> {
     let stdout = std::io::stdout();
 
-    crossterm::terminal::enable_raw_mode();
+    crossterm::terminal::enable_raw_mode().unwrap();
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
     terminal.clear()?;
@@ -55,7 +55,7 @@ pub async fn start_ui(app: &Arc<tokio::sync::Mutex<App>>) -> Result<(), Box<dyn 
 
     terminal.clear()?;
     terminal.show_cursor()?;
-    crossterm::terminal::disable_raw_mode();
+    crossterm::terminal::disable_raw_mode().unwrap();
 
     Ok(())
 }

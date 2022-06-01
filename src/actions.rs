@@ -8,9 +8,6 @@ use crate::inputs::key::Key;
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Action {
     Quit,
-    Sleep,
-    IncreaseDelay,
-    DecreaseDelay,
     PlaySound,
     PauseSound,
 }
@@ -18,14 +15,7 @@ pub enum Action {
 impl Action {
     /// All available actions
     pub fn iterator() -> Iter<'static, Action> {
-        static ACTIONS: [Action; 6] = [
-            Action::Quit,
-            Action::Sleep,
-            Action::IncreaseDelay,
-            Action::DecreaseDelay,
-            Action::PlaySound,
-            Action::PauseSound,
-        ];
+        static ACTIONS: [Action; 3] = [Action::Quit, Action::PlaySound, Action::PauseSound];
         ACTIONS.iter()
     }
 
@@ -33,9 +23,6 @@ impl Action {
     pub fn keys(&self) -> &[Key] {
         match self {
             Action::Quit => &[Key::Ctrl('c'), Key::Char('q')],
-            Action::Sleep => &[Key::Char('s')],
-            Action::IncreaseDelay => &[Key::Char('+')],
-            Action::DecreaseDelay => &[Key::Char('-')],
             Action::PlaySound => &[Key::Enter],
             Action::PauseSound => &[Key::Char('p')],
         }
@@ -47,9 +34,6 @@ impl Display for Action {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let str = match self {
             Action::Quit => "Quit",
-            Action::Sleep => "Sleep",
-            Action::IncreaseDelay => "IncreaseDelay",
-            Action::DecreaseDelay => "DecreaseDelay",
             Action::PlaySound => "PlaySound",
             Action::PauseSound => "PauseSound",
         };

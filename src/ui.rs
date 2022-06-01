@@ -53,7 +53,8 @@ where
 
     // Duration
     if let Some(duration) = app.state().duration() {
-        let duration_block = draw_duration(duration);
+        let total_duration = app.state().total_duration().unwrap();
+        let duration_block = draw_duration(duration, total_duration);
         rect.render_widget(duration_block, chunks[2]);
     }
 
@@ -90,23 +91,10 @@ fn draw_body<'a>(loading: bool, state: &AppState) -> Paragraph<'a> {
         "Not Initialized"
     };
     let loading_text = if loading { "Loading..." } else { "" };
-    let sleep_text = if let Some(sleeps) = state.count_sleep() {
-        format!("Sleep count: {}", sleeps)
-    } else {
-        String::default()
-    };
-
-    let tick_text = if let Some(ticks) = state.count_tick() {
-        format!("Tick count: {}", ticks)
-    } else {
-        String::default()
-    };
 
     Paragraph::new(vec![
         Spans::from(Span::raw(initialized_text)),
         Spans::from(Span::raw(loading_text)),
-        Spans::from(Span::raw(sleep_text)),
-        Spans::from(Span::raw(tick_text)),
     ])
     .style(Style::default().fg(Color::LightCyan))
     .alignment(Alignment::Left)
@@ -167,10 +155,14 @@ fn draw_logs<'a>() -> TuiLoggerWidget<'a> {
         .style(Style::default().fg(Color::White).bg(Color::Black))
 }
 
-fn draw_duration(duration: &Duration) -> LineGauge {
-    let sec = duration.as_secs();
-    let label = format!("{}s", sec);
-    let ratio = sec as f64 / 10.0;
+fn draw_duration<'a>(duration: &Duration, total_duration: &Duration) -> LineGauge<'a> {
+    let min = duration.as_secs() / 60;
+    let sec = duration.as_secs() % 60;
+    let label = format!("{}:{}", min, sec);
+
+    let ms = duration.as_millis() as f64;
+    let total_ms = total_duration.as_millis() as f64;
+    let ratio = ms / total_ms;
 
     LineGauge::default()
         .block(
