@@ -7,7 +7,7 @@ use log::error;
 use super::key::Key;
 use super::InputEvent;
 
-/// A small event handler that wrap crossterm input and tick event. Each event
+/// A small event handler that wraps crossterm input and tick event. Each event
 /// type is handled in its own thread and returned to a common `Receiver`
 pub struct Events {
     rx: tokio::sync::mpsc::Receiver<InputEvent>,
@@ -17,7 +17,7 @@ pub struct Events {
 }
 
 impl Events {
-    /// Constructs an new instance of `Events` with the default config.
+    /// Constructs a new instance of `Events` with the default config.
     pub fn new(tick_rate: Duration) -> Events {
         let (tx, rx) = tokio::sync::mpsc::channel(100);
         let stop_capture = Arc::new(AtomicBool::new(false));
