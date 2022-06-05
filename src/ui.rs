@@ -7,12 +7,16 @@ use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
 use tui::symbols::line;
 use tui::text::{Span, Spans};
-use tui::widgets::{Block, BorderType, Borders, Cell, LineGauge, Paragraph, Row, Table};
+use tui::widgets::{
+    Block, BorderType, Borders, Cell, LineGauge, List, ListItem, Paragraph, Row, Table,
+};
 use tui::Frame;
 
 use std::time::Duration;
 
 use tui_logger::TuiLoggerWidget;
+
+use yandex_rust_music::Track;
 
 pub fn draw<B>(rect: &mut Frame<B>, app: &App)
 where
@@ -45,8 +49,16 @@ where
         .constraints([Constraint::Min(20), Constraint::Length(32)].as_ref())
         .split(chunks[1]);
 
-    let body = draw_body(app.is_loading(), app.state());
-    rect.render_widget(body, body_chunks[0]);
+    let player_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(3), Constraint::Length(5)].as_ref())
+        .split(body_chunks[0]);
+
+    let playlist = draw_playlist(app.current_playlist());
+    rect.render_widget(playlist, player_chunks[0]);
+
+    let state = draw_body(app.is_loading(), app.state());
+    rect.render_widget(state, player_chunks[1]);
 
     let help = draw_help(app.actions());
     rect.render_widget(help, body_chunks[1]);
@@ -104,6 +116,19 @@ fn draw_body<'a>(loading: bool, state: &AppState) -> Paragraph<'a> {
             .style(Style::default().fg(Color::White))
             .border_type(BorderType::Plain),
     )
+}
+
+fn draw_playlist(playlist: &Vec<Track>) -> List {
+    let tasks: Vec<ListItem> = playlist
+        .iter()
+        .map(|i| ListItem::new(vec![Spans::from(i.title())]))
+        .collect();
+    let tasks = List::new(tasks)
+        .block(Block::default().borders(Borders::ALL).title("List"))
+        .highlight_style(Style::default().add_modifier(Modifier::BOLD))
+        .highlight_symbol("> ");
+
+    tasks
 }
 
 fn draw_help(actions: &Actions) -> Table {

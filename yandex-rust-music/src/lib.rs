@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 #[derive(Clone)]
 pub struct Client {
-    tracks: Vec<Track>,
+    client_py: PyObject,
 }
 
 impl Client {
@@ -21,16 +21,31 @@ impl Client {
         let client_py = client_class_py.call1(((token),)).unwrap();
         client_py.call_method0("init").unwrap();
 
-        let feed_py = client_py.call_method0("feed").unwrap();
+        Self {
+            client_py: client_py.into(),
+        }
+    }
+
+    pub fn get_random_track(&self) -> Track {
+        let playlist = self.playlist_of_the_day();
+        let random_track_num = thread_rng().gen_range(0..playlist.len());
+
+        playlist[random_track_num].clone()
+    }
+
+    pub fn playlist_of_the_day(&self) -> Vec<Track> {
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+        let clone_client_py = self.client_py.clone_ref(py);
+        let ref_client_py = clone_client_py.as_ref(py);
+
+        let feed_py = ref_client_py.call_method0("feed").unwrap();
         let generated_playlists_py = feed_py.getattr("generated_playlists").unwrap();
         // TODO: hard-code playlist of the day - update to extract playlist of the day
         let playlist_of_the_day_py = generated_playlists_py.get_item(2).unwrap();
-        let playlist_type_py = playlist_of_the_day_py.getattr("type").unwrap();
-        println!("Playlist type {}", playlist_type_py);
         let playlist_py = playlist_of_the_day_py.getattr("data").unwrap();
-        // let track_count_py = playlist_py.getattr("track_count").unwrap();
-        // let track_count = track_count_py.extract::<usize>().unwrap();
-        let track_count = 2;
+        let track_count_py = playlist_py.getattr("track_count").unwrap();
+        let track_count = track_count_py.extract::<usize>().unwrap();
 
         let mut tracks = Vec::new();
         for i in 0..track_count {
@@ -50,13 +65,7 @@ impl Client {
             });
         }
 
-        Self { tracks: tracks }
-    }
-
-    pub fn get_random_track(&self) -> &Track {
-        let random_track_num = thread_rng().gen_range(0..self.tracks.len());
-
-        &self.tracks[random_track_num]
+        tracks
     }
 }
 
@@ -87,6 +96,10 @@ impl Track {
     pub fn total_duration(&self) -> Option<Duration> {
         let total_duration = self.total_duration;
         Some(total_duration)
+    }
+
+    pub fn title(&self) -> String {
+        self.title.clone()
     }
 }
 #[derive(Copy, Clone)]
@@ -192,6 +205,14 @@ mod tests {
         let track = client.get_random_track();
         let total_duration: Duration = track.total_duration().unwrap();
         assert!(total_duration.as_secs() > 60);
+    }
+
+    #[test]
+    fn client_can_get_playlist_of_the_day() {
+        let client = Client::new("AQAAAAA59C-DAAG8Xn4u-YGNfkkqnBG_DcwEnjM");
+        let playlist = client.playlist_of_the_day();
+
+        assert_eq!(playlist.len(), 60);
     }
 
     #[test]

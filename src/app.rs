@@ -5,7 +5,7 @@ use crate::io::IoEvent;
 use std::time::Duration;
 
 use log::{debug, error, warn};
-use yandex_rust_music::{Client, Player, Status};
+use yandex_rust_music::{Client, Player, Status, Track};
 
 #[derive(Clone)]
 pub enum AppState {
@@ -72,6 +72,7 @@ pub struct App {
     client: Client,
     player: Player,
     status: Status,
+    current_playlist: Vec<Track>,
 }
 
 impl App {
@@ -90,6 +91,7 @@ impl App {
             client,
             player,
             status: Status::Paused(Duration::from_secs(0)),
+            current_playlist: Vec::<Track>::new(),
         }
     }
 
@@ -100,6 +102,8 @@ impl App {
         self.player.append(&track_path);
         let total_duration = track.total_duration().unwrap();
         debug!("Added song {}...", track_path);
+        self.current_playlist = self.client.playlist_of_the_day();
+        debug!("Added playlist of the day...");
         self.state = AppState::initialized(&total_duration);
     }
 
@@ -152,5 +156,9 @@ impl App {
 
     pub fn loaded(&mut self) {
         self.is_loading = false;
+    }
+
+    pub fn current_playlist(&self) -> &Vec<Track> {
+        &self.current_playlist
     }
 }
