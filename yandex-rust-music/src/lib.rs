@@ -46,6 +46,8 @@ impl Client {
         let playlist_py = playlist_of_the_day_py.getattr("data").unwrap();
         let track_count_py = playlist_py.getattr("track_count").unwrap();
         let track_count = track_count_py.extract::<usize>().unwrap();
+        // FIXME: remove
+        let track_count = 4;
 
         let mut tracks = Vec::new();
         for i in 0..track_count {
@@ -174,6 +176,17 @@ impl Player {
 
     pub fn pause(&self) {
         self.sink.pause();
+    }
+
+    // FIXME: add a test
+    pub fn stop(&mut self) {
+        self.sink.stop();
+        let (stream, stream_handle) = OutputStream::try_default().unwrap();
+        // NB: sink must be re-created since calling stop makes it unusable
+        let sink = Sink::try_new(&stream_handle).unwrap();
+        self.sink = sink;
+        self._stream = stream;
+        self._stream_handle = stream_handle;
     }
 }
 
