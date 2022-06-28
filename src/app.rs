@@ -7,7 +7,7 @@ use std::time::Duration;
 use tui::widgets::ListState;
 
 use log::{debug, error, warn};
-use yandex_rust_music::{Client, Player, Status, Track};
+use yandex_rust_music::{Client, Player, Track};
 
 #[derive(Clone)]
 pub enum AppState {
@@ -23,7 +23,7 @@ impl AppState {
         let duration = Duration::from_secs(0);
         Self::Initialized {
             duration,
-            total_duration: total_duration.clone(),
+            total_duration: *total_duration,
         }
     }
 
@@ -60,19 +60,13 @@ impl Default for AppState {
     }
 }
 
+#[derive(Default, Clone)]
 pub struct DisplayedTracks {
     pub tracks: Vec<Track>,
     pub state: ListState,
 }
 
 impl DisplayedTracks {
-    fn new(tracks: Vec<Track>) -> Self {
-        Self {
-            tracks,
-            state: ListState::default(),
-        }
-    }
-
     pub fn set_tracks(&mut self, tracks: Vec<Track>) {
         self.tracks = tracks;
         self.state = ListState::default();
@@ -123,7 +117,6 @@ pub struct App {
     state: AppState,
     client: Client,
     player: Player,
-    status: Status,
     current_playlist: Vec<Track>,
     pub displayed_tracks: DisplayedTracks,
     cur_track_idx: usize,
@@ -135,8 +128,7 @@ impl App {
         let is_loading = false;
         let state = AppState::default();
         let client = Client::new("AQAAAAA59C-DAAG8Xn4u-YGNfkkqnBG_DcwEnjM");
-        // TODO: Player::default
-        let player = Player::new();
+        let player = Player::default();
         Self {
             io_tx,
             actions,
@@ -144,10 +136,8 @@ impl App {
             state,
             client,
             player,
-            status: Status::Paused(Duration::from_secs(0)),
             current_playlist: Vec::<Track>::new(),
-            // FIXME: make default and new without arguments
-            displayed_tracks: DisplayedTracks::new(Vec::<Track>::new()),
+            displayed_tracks: DisplayedTracks::default(),
             cur_track_idx: 0,
         }
     }
@@ -163,7 +153,6 @@ impl App {
         .into();
         self.current_playlist = self.client.playlist_of_the_day();
         debug!("Added playlist of the day...");
-        // FIXME: avoid clone
         self.displayed_tracks
             .set_tracks(self.current_playlist.clone());
         self.displayed_tracks.next();
@@ -178,7 +167,9 @@ impl App {
     }
 
     pub async fn update_on_tick(&mut self) -> AppReturn {
-        self.state.update_duration(self.status.elapsed());
+        if let Ok(status) = self.player.status() {
+            self.state.update_duration(status.elapsed());
+        }
         AppReturn::Continue
     }
 
@@ -204,17 +195,13 @@ impl App {
                         let track_path = track_ref.download();
                         self.player.append(&track_path);
                         let total_duration = track_ref.total_duration().unwrap();
-                        self.status = Status::Paused(Duration::from_secs(0));
                         self.state = AppState::initialized(&total_duration);
                     }
-                    // TODO: can we avoid duplication here?
-                    self.player.play();
-                    self.status.play();
+                    let _status = self.player.play();
                     AppReturn::Continue
                 }
                 Action::PauseSound => {
-                    self.player.pause();
-                    self.status.pause();
+                    let _status = self.player.pause();
                     AppReturn::Continue
                 }
                 Action::SelectNextTrack => {

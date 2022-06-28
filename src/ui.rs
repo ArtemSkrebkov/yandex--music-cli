@@ -1,6 +1,7 @@
 use crate::actions::Actions;
 use crate::app::App;
 use crate::app::AppState;
+use crate::app::DisplayedTracks;
 
 use tui::backend::Backend;
 use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
@@ -15,8 +16,6 @@ use tui::Frame;
 use std::time::Duration;
 
 use tui_logger::TuiLoggerWidget;
-
-use yandex_rust_music::Track;
 
 pub fn draw<B>(rect: &mut Frame<B>, app: &mut App)
 where
@@ -54,21 +53,8 @@ where
         .constraints([Constraint::Min(3), Constraint::Length(5)].as_ref())
         .split(body_chunks[0]);
 
-    // let playlist = draw_playlist(app.current_playlist());
-    // rect.render_widget(playlist, player_chunks[0]);
-    // FIXME: can we avoid clone?
-    // let playlist = draw_tracks(&displayed_tracks);
-    let tracks: Vec<ListItem> = app
-        .displayed_tracks
-        .tracks
-        .iter()
-        .map(|i| ListItem::new(vec![Spans::from(i.title())]))
-        .collect();
-    let list = List::new(tracks)
-        .block(Block::default().borders(Borders::ALL).title("List"))
-        .highlight_style(Style::default().add_modifier(Modifier::BOLD))
-        .highlight_symbol("> ");
-    rect.render_stateful_widget(list, player_chunks[0], &mut app.displayed_tracks.state);
+    let playlist = draw_tracks(app.displayed_tracks.clone());
+    rect.render_stateful_widget(playlist, player_chunks[0], &mut app.displayed_tracks.state);
 
     let state = draw_body(app.is_loading(), app.state());
     rect.render_widget(state, player_chunks[1]);
@@ -131,31 +117,18 @@ fn draw_body<'a>(loading: bool, state: &AppState) -> Paragraph<'a> {
     )
 }
 
-fn draw_playlist(playlist: &Vec<Track>) -> List {
-    let songs: Vec<ListItem> = playlist
+fn draw_tracks(playlist: DisplayedTracks) -> List<'static> {
+    let tracks: Vec<ListItem> = playlist
+        .tracks
         .iter()
         .map(|i| ListItem::new(vec![Spans::from(i.title())]))
         .collect();
-    let songs = List::new(songs)
+    let list = List::new(tracks)
         .block(Block::default().borders(Borders::ALL).title("List"))
         .highlight_style(Style::default().add_modifier(Modifier::BOLD))
         .highlight_symbol("> ");
-
-    songs
+    list
 }
-
-// fn draw_tracks(playlist: &DisplayedTracks) -> List {
-//     let tracks: Vec<ListItem> = playlist
-//         .tracks
-//         .iter()
-//         .map(|i| ListItem::new(vec![Spans::from(i.title())]))
-//         .collect();
-//     let list = List::new(tracks)
-//         .block(Block::default().borders(Borders::ALL).title("List"))
-//         .highlight_style(Style::default().add_modifier(Modifier::BOLD))
-//         .highlight_symbol("> ");
-//     list
-// }
 
 fn draw_help(actions: &Actions) -> Table {
     let key_style = Style::default().fg(Color::LightCyan);

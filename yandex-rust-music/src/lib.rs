@@ -7,6 +7,8 @@ use std::io::BufReader;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+use eyre::{eyre, Result};
+
 #[derive(Clone)]
 pub struct Client {
     client_py: PyObject,
@@ -137,25 +139,15 @@ pub struct Player {
     sink: rodio::Sink,
     _stream: OutputStream,
     _stream_handle: OutputStreamHandle,
+    status: Status,
 }
 
 unsafe impl Send for Player {}
 
 impl Player {
-    pub fn new() -> Self {
-        let (stream, stream_handle) = OutputStream::try_default().unwrap();
-        let sink = Sink::try_new(&stream_handle).unwrap();
-        Self {
-            sink,
-            _stream: stream,
-            _stream_handle: stream_handle,
-        }
-    }
-
     pub fn append(&mut self, filename: &str) {
         // Load a sound from a file, using a path relative to Cargo.toml
         let file = BufReader::new(File::open(filename).unwrap());
-        // Decode that sound file into a source
         let source = Decoder::new(file).unwrap();
         // FIXME: for some reason
         // we cannot get duration from Source here
@@ -170,31 +162,58 @@ impl Player {
         }
     }
 
-    pub fn play(&self) {
-        self.sink.play();
+    pub fn play(&mut self) -> Result<Status> {
+        if !self.sink.empty() {
+            self.sink.play();
+            self.status.play();
+            Ok(self.status)
+        } else {
+            Err(eyre!("There is nothing to play in Player"))
+        }
     }
 
-    pub fn pause(&self) {
-        self.sink.pause();
+    pub fn pause(&mut self) -> Result<Status> {
+        if !self.sink.empty() {
+            self.sink.pause();
+            self.status.pause();
+            Ok(self.status)
+        } else {
+            Err(eyre!("There is nothing to pause in Player"))
+        }
     }
 
     // FIXME: add a test
     pub fn stop(&mut self) {
         self.sink.stop();
+        *self = Self::default();
+    }
+
+    pub fn status(&self) -> Result<Status> {
+        if !self.sink.empty() {
+            Ok(self.status)
+        } else {
+            Err(eyre!(
+                "Cannot provide status since there is nothing to play"
+            ))
+        }
+    }
+}
+
+impl Default for Player {
+    fn default() -> Self {
         let (stream, stream_handle) = OutputStream::try_default().unwrap();
-        // NB: sink must be re-created since calling stop makes it unusable
         let sink = Sink::try_new(&stream_handle).unwrap();
-        self.sink = sink;
-        self._stream = stream;
-        self._stream_handle = stream_handle;
+        Self {
+            sink,
+            _stream: stream,
+            _stream_handle: stream_handle,
+            status: Status::Paused(Duration::from_secs(0)),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    // FIXME: why does not work?
-    // use yandex-rust-music::{Client, Track, Downloader, Player};
-    // FIXME: What does it mean?
     use super::*;
     #[test]
     fn it_works() {
@@ -204,12 +223,16 @@ mod tests {
 
         let local_track_path = track.download();
 
-        let mut player = Player::new();
+        let mut player = Player::default();
         player.append(&local_track_path);
-        player.play();
+        let status = player.play();
+        assert!(status.is_ok());
         println!("Started playing...");
+
         std::thread::sleep(std::time::Duration::from_secs(1));
-        player.pause();
+
+        let status = player.pause();
+        assert!(status.is_ok());
     }
 
     #[test]
@@ -238,9 +261,49 @@ mod tests {
             _ => panic!("Unexpected value"),
         };
 
-        ::std::thread::sleep(Duration::from_secs(5));
+        ::std::thread::sleep(Duration::from_secs(2));
         status.play();
 
+        assert_eq!(status.elapsed().as_secs(), duration.as_secs());
+    }
+
+    #[test]
+    fn player_can_stop() {
+        let client = Client::new("AQAAAAA59C-DAAG8Xn4u-YGNfkkqnBG_DcwEnjM");
+        let track = client.get_random_track();
+        println!("Track name = {}", track.title);
+
+        let local_track_path = track.download();
+
+        let mut player = Player::default();
+        player.append(&local_track_path);
+        let _status = player.play();
+        println!("Started playing...");
+
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        player.stop();
+
+        assert!(player.play().is_err());
+    }
+
+    #[test]
+    fn player_can_get_status() {
+        let client = Client::new("AQAAAAA59C-DAAG8Xn4u-YGNfkkqnBG_DcwEnjM");
+        let track = client.get_random_track();
+        println!("Track name = {}", track.title);
+
+        let local_track_path = track.download();
+
+        let mut player = Player::default();
+        player.append(&local_track_path);
+        let status = player.play().unwrap();
+        let duration = Duration::from_secs(2);
+
+        ::std::thread::sleep(duration);
+        let status = player.pause().unwrap();
+        assert_eq!(status.elapsed().as_secs(), duration.as_secs());
+
+        let status = player.status().unwrap();
         assert_eq!(status.elapsed().as_secs(), duration.as_secs());
     }
 }

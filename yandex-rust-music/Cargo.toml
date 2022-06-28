@@ -11,3 +11,4 @@ features = ["auto-initialize"]
 [dependencies]
 rand = "0.8.4"
 rodio = "0.15.0"
+eyre = "0.6.8"
