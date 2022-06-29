@@ -215,9 +215,19 @@ impl Default for Player {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Read;
+    fn create_client() -> Client {
+        let mut token_file = File::open("../token").unwrap();
+        let mut token = String::new();
+        let _ = token_file.read_to_string(&mut token);
+        let _ = token.pop();
+
+        Client::new(&token)
+    }
+
     #[test]
     fn it_works() {
-        let client = Client::new("AQAAAAA59C-DAAG8Xn4u-YGNfkkqnBG_DcwEnjM");
+        let client = create_client();
         let track = client.get_random_track();
         println!("Track name = {}", track.title);
 
@@ -237,7 +247,7 @@ mod tests {
 
     #[test]
     fn track_can_get_total_duration() {
-        let client = Client::new("AQAAAAA59C-DAAG8Xn4u-YGNfkkqnBG_DcwEnjM");
+        let client = create_client();
         let track = client.get_random_track();
         let total_duration: Duration = track.total_duration().unwrap();
         assert!(total_duration.as_secs() > 60);
@@ -269,7 +279,7 @@ mod tests {
 
     #[test]
     fn player_can_stop() {
-        let client = Client::new("AQAAAAA59C-DAAG8Xn4u-YGNfkkqnBG_DcwEnjM");
+        let client = create_client();
         let track = client.get_random_track();
         println!("Track name = {}", track.title);
 
@@ -288,7 +298,7 @@ mod tests {
 
     #[test]
     fn player_can_get_status() {
-        let client = Client::new("AQAAAAA59C-DAAG8Xn4u-YGNfkkqnBG_DcwEnjM");
+        let client = create_client();
         let track = client.get_random_track();
         println!("Track name = {}", track.title);
 
@@ -296,7 +306,7 @@ mod tests {
 
         let mut player = Player::default();
         player.append(&local_track_path);
-        let status = player.play().unwrap();
+        let _status = player.play().unwrap();
         let duration = Duration::from_secs(2);
 
         ::std::thread::sleep(duration);

@@ -2,6 +2,8 @@ use crate::actions::Action;
 use crate::actions::Actions;
 use crate::inputs::key::Key;
 use crate::io::IoEvent;
+use std::fs::File;
+use std::io::Read;
 use std::time::Duration;
 
 use tui::widgets::ListState;
@@ -123,11 +125,21 @@ pub struct App {
 }
 
 impl App {
+    fn create_client() -> Client {
+        let mut token_file = File::open("token").unwrap();
+        let mut token = String::new();
+        let _ = token_file.read_to_string(&mut token);
+        let _ = token.pop();
+
+        Client::new(&token)
+    }
+
     pub fn new(io_tx: tokio::sync::mpsc::Sender<IoEvent>) -> Self {
         let actions = vec![Action::Quit].into();
         let is_loading = false;
         let state = AppState::default();
-        let client = Client::new("AQAAAAA59C-DAAG8Xn4u-YGNfkkqnBG_DcwEnjM");
+
+        let client = Self::create_client();
         let player = Player::default();
         Self {
             io_tx,
