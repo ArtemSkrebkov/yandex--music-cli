@@ -178,9 +178,31 @@ impl App {
         self.state = AppState::initialized(&total_duration);
     }
 
+    pub fn song_switched(&mut self) {
+        self.displayed_tracks.next();
+        // FIXME: duplication
+        let sel_track_idx = self.displayed_tracks.state.selected().unwrap();
+        if self.cur_track_idx != sel_track_idx {
+            self.cur_track_idx = sel_track_idx;
+            self.player.stop();
+            let track_ref = &self.displayed_tracks.tracks[sel_track_idx];
+            let track_path = track_ref.download();
+            self.player.append(&track_path);
+            let total_duration = track_ref.total_duration().unwrap();
+            self.state = AppState::initialized(&total_duration);
+        }
+        let _status = self.player.play();
+    }
+
     pub async fn update_on_tick(&mut self) -> AppReturn {
         if let Ok(status) = self.player.status() {
             self.state.update_duration(status.elapsed());
+
+            let track_ref = &self.displayed_tracks.tracks[self.cur_track_idx];
+            let total_duration = track_ref.total_duration().unwrap();
+            if status.elapsed().as_secs() == total_duration.as_secs() {
+                self.dispatch(IoEvent::SongIsOver).await;
+            }
         }
         AppReturn::Continue
     }

@@ -48,8 +48,6 @@ impl Client {
         let playlist_py = playlist_of_the_day_py.getattr("data").unwrap();
         let track_count_py = playlist_py.getattr("track_count").unwrap();
         let track_count = track_count_py.extract::<usize>().unwrap();
-        // FIXME: remove
-        let track_count = 4;
 
         let mut tracks = Vec::new();
         for i in 0..track_count {
