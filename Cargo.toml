@@ -5,9 +5,17 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[dependencies]
-rodio = "0.15.0"
-[dependencies.pyo3]
-version = "0.16.4"
-features = ["auto-initialize"]
+[workspace]
+members = [
+    "yandex-rust-music"
+]
 
+[dependencies]
+yandex-rust-music = { path = "yandex-rust-music", version = "0.1.0" }
+
+tui = "0.18"
+crossterm = "0.23"
+tokio = { version = "1.18.2", features = ["full"] }
+log = "0.4.17"
+eyre = "0.6.8"
+tui-logger = { git = "https://github.com/gin66/tui-logger", rev = "cd7e42665a8eac60adac6ab5d570730dfbcb3a12" }
