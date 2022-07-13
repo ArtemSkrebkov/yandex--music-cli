@@ -7,7 +7,7 @@ use std::io::BufReader;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use eyre::{eyre, Result};
+use eyre::Result;
 
 #[derive(Clone)]
 pub struct Client {
@@ -95,6 +95,23 @@ impl Track {
         filename
     }
 
+    // FIXME: not going to work this way
+    pub async fn download_async(&self) -> String {
+        let filename = self.title.clone() + ".mp3";
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+        let clone_track_py = self.track_py.clone_ref(py);
+        let ref_track_py = clone_track_py.as_ref(py);
+        if !Path::new(&filename).exists() {
+            // TODO set bitrait from settings
+            let coroutine = ref_track_py
+                .call_method("download_async", (&filename, "mp3", 320), None)
+                .unwrap();
+        }
+
+        filename
+    }
+
     pub fn total_duration(&self) -> Option<Duration> {
         let total_duration = self.total_duration;
         Some(total_duration)
@@ -104,10 +121,11 @@ impl Track {
         self.title.clone()
     }
 }
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Status {
     Playing(Instant, Duration),
     Paused(Duration),
+    Empty,
 }
 
 impl Status {
@@ -115,6 +133,7 @@ impl Status {
         match self {
             Status::Paused(d) => d,
             Status::Playing(start, extra) => start.elapsed() + extra,
+            Status::Empty => panic!("Cannot take elapsed time if there is nothing to play"),
         }
     }
 
@@ -122,6 +141,7 @@ impl Status {
         *self = match *self {
             Status::Paused(_) => *self,
             Status::Playing(start, extra) => Status::Paused(start.elapsed() + extra),
+            Status::Empty => panic!("Cannot pause a song if there is nothing to play"),
         };
     }
 
@@ -129,6 +149,7 @@ impl Status {
         *self = match *self {
             Status::Playing(_, _) => *self,
             Status::Paused(duration) => Status::Playing(Instant::now(), duration),
+            Status::Empty => panic!("Cannot play a song if there is nothing to play"),
         };
     }
 }
@@ -154,46 +175,45 @@ impl Player {
         //         .total_duration()
         //         .expect("Cannot get duration of source"),
         // });
+        if self.sink.empty() {
+            self.status = Status::Paused(Duration::from_secs(0));
+        }
+
         self.sink.append(source);
         if !self.sink.is_paused() {
             self.sink.pause();
         }
     }
 
-    pub fn play(&mut self) -> Result<Status> {
+    pub fn play(&mut self) {
         if !self.sink.empty() {
             self.sink.play();
             self.status.play();
-            Ok(self.status)
         } else {
-            Err(eyre!("There is nothing to play in Player"))
+            panic!("There is nothing to play in Player");
         }
     }
 
-    pub fn pause(&mut self) -> Result<Status> {
+    pub fn pause(&mut self) {
         if !self.sink.empty() {
             self.sink.pause();
             self.status.pause();
-            Ok(self.status)
         } else {
-            Err(eyre!("There is nothing to pause in Player"))
+            panic!("There is nothing to pause in Player");
         }
     }
 
-    // FIXME: add a test
     pub fn stop(&mut self) {
         self.sink.stop();
         *self = Self::default();
     }
 
-    pub fn status(&self) -> Result<Status> {
-        if !self.sink.empty() {
-            Ok(self.status)
-        } else {
-            Err(eyre!(
-                "Cannot provide status since there is nothing to play"
-            ))
+    pub fn status(&mut self) -> Result<Status> {
+        if self.sink.empty() && self.status != Status::Empty {
+            self.status = Status::Empty
         }
+
+        Ok(self.status)
     }
 }
 
@@ -205,7 +225,7 @@ impl Default for Player {
             sink,
             _stream: stream,
             _stream_handle: stream_handle,
-            status: Status::Paused(Duration::from_secs(0)),
+            status: Status::Empty,
         }
     }
 }
@@ -233,13 +253,15 @@ mod tests {
 
         let mut player = Player::default();
         player.append(&local_track_path);
-        let status = player.play();
+        player.play();
+        let status = player.status();
         assert!(status.is_ok());
         println!("Started playing...");
 
         std::thread::sleep(std::time::Duration::from_secs(1));
 
-        let status = player.pause();
+        player.pause();
+        let status = player.status();
         assert!(status.is_ok());
     }
 
@@ -276,6 +298,7 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
     fn player_can_stop() {
         let client = create_client();
         let track = client.get_random_track();
@@ -291,7 +314,7 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_secs(1));
         player.stop();
 
-        assert!(player.play().is_err());
+        player.play();
     }
 
     #[test]
@@ -303,12 +326,15 @@ mod tests {
         let local_track_path = track.download();
 
         let mut player = Player::default();
+        assert_eq!(Status::Empty, player.status().unwrap());
+
         player.append(&local_track_path);
-        let _status = player.play().unwrap();
+        player.play();
         let duration = Duration::from_secs(2);
 
         ::std::thread::sleep(duration);
-        let status = player.pause().unwrap();
+        player.pause();
+        let status = player.status().unwrap();
         assert_eq!(status.elapsed().as_secs(), duration.as_secs());
 
         let status = player.status().unwrap();

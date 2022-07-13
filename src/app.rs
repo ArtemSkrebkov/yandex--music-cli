@@ -9,7 +9,7 @@ use std::time::Duration;
 use tui::widgets::ListState;
 
 use log::{debug, error, warn};
-use yandex_rust_music::{Client, Player, Track};
+use yandex_rust_music::{Client, Player, Status, Track};
 
 #[derive(Clone)]
 pub enum AppState {
@@ -168,9 +168,26 @@ impl App {
         self.displayed_tracks
             .set_tracks(self.current_playlist.clone());
         self.displayed_tracks.next();
-        let sel_track_idx = self.displayed_tracks.state.selected().unwrap();
-        self.cur_track_idx = sel_track_idx;
+        self.prepare_next_song();
+        let _status = self.player.play();
+    }
 
+    pub fn song_switched(&mut self) {
+        self.prepare_next_song();
+        let _status = self.player.play();
+    }
+
+    fn prepare_next_song(&mut self) {
+        let sel_track_idx = self.displayed_tracks.state.selected().unwrap();
+        debug!(
+            "Play next song current {} {}, next {} {}",
+            self.cur_track_idx,
+            self.displayed_tracks.tracks[self.cur_track_idx].title(),
+            sel_track_idx,
+            self.displayed_tracks.tracks[sel_track_idx].title()
+        );
+        self.cur_track_idx = sel_track_idx;
+        self.player.stop();
         let track_ref = &self.displayed_tracks.tracks[sel_track_idx];
         let track_path = track_ref.download();
         self.player.append(&track_path);
@@ -178,30 +195,19 @@ impl App {
         self.state = AppState::initialized(&total_duration);
     }
 
-    pub fn song_switched(&mut self) {
-        self.displayed_tracks.next();
-        // FIXME: duplication
-        let sel_track_idx = self.displayed_tracks.state.selected().unwrap();
-        if self.cur_track_idx != sel_track_idx {
-            self.cur_track_idx = sel_track_idx;
-            self.player.stop();
-            let track_ref = &self.displayed_tracks.tracks[sel_track_idx];
-            let track_path = track_ref.download();
-            self.player.append(&track_path);
-            let total_duration = track_ref.total_duration().unwrap();
-            self.state = AppState::initialized(&total_duration);
-        }
-        let _status = self.player.play();
-    }
-
     pub async fn update_on_tick(&mut self) -> AppReturn {
+        // debug!("Tick...");
         if let Ok(status) = self.player.status() {
-            self.state.update_duration(status.elapsed());
-
-            let track_ref = &self.displayed_tracks.tracks[self.cur_track_idx];
-            let total_duration = track_ref.total_duration().unwrap();
-            if status.elapsed().as_secs() == total_duration.as_secs() {
-                self.dispatch(IoEvent::SongIsOver).await;
+            if status == Status::Empty {
+                if let Some(sel_track_idx) = self.displayed_tracks.state.selected() {
+                    if sel_track_idx == self.cur_track_idx {
+                        self.displayed_tracks.next();
+                        debug!("Send SongIsOver");
+                        self.dispatch(IoEvent::SongIsOver).await;
+                    }
+                }
+            } else {
+                self.state.update_duration(status.elapsed());
             }
         }
         AppReturn::Continue
@@ -221,16 +227,7 @@ impl App {
             match action {
                 Action::Quit => AppReturn::Exit,
                 Action::PlaySound => {
-                    let sel_track_idx = self.displayed_tracks.state.selected().unwrap();
-                    if self.cur_track_idx != sel_track_idx {
-                        self.cur_track_idx = sel_track_idx;
-                        self.player.stop();
-                        let track_ref = &self.displayed_tracks.tracks[sel_track_idx];
-                        let track_path = track_ref.download();
-                        self.player.append(&track_path);
-                        let total_duration = track_ref.total_duration().unwrap();
-                        self.state = AppState::initialized(&total_duration);
-                    }
+                    self.prepare_next_song();
                     let _status = self.player.play();
                     AppReturn::Continue
                 }
